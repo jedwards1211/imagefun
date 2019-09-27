@@ -6,9 +6,9 @@ const prod = 'production' === process.env.NODE_ENV
 
 module.exports = {
   mode: prod ? 'production' : 'development',
-  entry: ['@babel/polyfill', './demo/index.js'],
+  entry: ['@babel/polyfill', './src/index.js'],
   output: {
-    path: path.join(__dirname, 'demo'),
+    path: path.join(__dirname, 'assets'),
     filename: 'bundle.js',
   },
   resolve: {
@@ -47,6 +47,6 @@ module.exports = {
   },
   devServer: {
     port: 3000,
-    contentBase: path.join(__dirname, 'demo'),
+    contentBase: path.join(__dirname, 'src'),
   },
 }

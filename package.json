@@ -14,7 +14,7 @@
     "flow:coverage": "for file in src/**.js test/**.js; do echo $file; flow coverage $file; done",
     "flow:watch": "flow-watch -e js,js.flow,flowconfig --ignore es/ --ignore node_modules/ --watch .flowconfig --watch src/ --watch test/",
     "clean": "rimraf es lib $(cd src; ls) *.js.flow",
-    "build": "npm run clean && cross-env BABEL_ENV=production babel src --out-dir es && flow-copy-source -v src/ es && cross-env BABEL_ENV=es5 babel src --out-dir . && flow-copy-source -v src/ .",
+    "build": "cross-env NODE_ENV=production BABEL_ENV=es5 webpack",
     "test": "cross-env NODE_ENV=test BABEL_ENV=es5 mocha $npm_package_config_mocha && cross-env NODE_ENV=test BABEL_ENV=coverage nyc --reporter=lcov --reporter=text mocha $npm_package_config_mocha",
     "test:watch": "cross-env NODE_ENV=test BABEL_ENV=test mocha --watch $npm_package_config_mocha",
     "test:debug": "cross-env NODE_ENV=test BABEL_ENV=test mocha --inspect-brk $npm_package_config_mocha",
@@ -22,10 +22,9 @@
     "prepublishOnly": "npm run clean && npm run prettier:check && npm run lint && flow && npm test && npm run build",
     "open:coverage": "open coverage/lcov-report/index.html",
     "semantic-release": "semantic-release",
-    "demo:dev": "webpack-dev-server",
-    "build:demo": "cross-env NODE_ENV=production BABEL_ENV=es5 webpack",
-    "predeploy": "yarn build:demo",
-    "deploy": "gh-pages -d demo"
+    "start": "webpack-dev-server",
+    "predeploy": "yarn build",
+    "deploy": "gh-pages -d assets"
   },
   "husky": {
     "hooks": {
@@ -146,6 +145,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.1.5",
+    "@material-ui/system": "^4.4.3",
     "prop-types": "^15.0.0"
   },
   "peerDependencies": {

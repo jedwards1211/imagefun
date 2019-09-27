@@ -3,7 +3,7 @@
 !**/*.js.flow
 !/*.md
 !yarn.lock
-/demo
+/assets
 /lib
 /src
 /stories
