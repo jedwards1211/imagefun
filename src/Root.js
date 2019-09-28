@@ -18,6 +18,9 @@ import {
   palette,
 } from '@material-ui/system'
 
+import GLCanvas from './gl/GLCanvas'
+import GLTest from './GLTest'
+
 const Box = styled('div')(
   compose(
     display,
@@ -69,7 +72,9 @@ const Root = () => {
             boxShadow={2}
             bgcolor="white"
           >
-            <canvas width={600} height={600} />
+            <GLCanvas width={600} height={600}>
+              <GLTest />
+            </GLCanvas>
           </Box>
         </Box>
       </Box>
