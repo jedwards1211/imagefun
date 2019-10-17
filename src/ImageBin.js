@@ -29,6 +29,7 @@ export type Props = {
   size: number,
   value: ?string,
   onChange?: ?(value: ?string) => any,
+  onLoad?: ?(HTMLImageElement) => any,
 }
 
 const handleDragOver = (event: SyntheticEvent<any>) => {
@@ -36,10 +37,23 @@ const handleDragOver = (event: SyntheticEvent<any>) => {
   ;(event: any).dataTransfer.dropEffect = 'copy'
 }
 
-const ImageBin = ({ size, value, onChange }: Props): React.Node => {
+const ImageBin = ({ size, value, onChange, onLoad }: Props): React.Node => {
+  const imgRef = React.useRef()
+  const handleLoad = React.useCallback(() => {
+    if (onLoad && imgRef.current) onLoad(imgRef.current)
+  })
   let content
   if (value) {
-    content = <img width={size} height={size} src={value} />
+    content = (
+      <img
+        key={value}
+        width={size}
+        height={size}
+        src={value}
+        ref={imgRef}
+        onLoad={handleLoad}
+      />
+    )
   } else {
     content = (
       <Box

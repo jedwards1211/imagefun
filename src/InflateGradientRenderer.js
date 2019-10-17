@@ -13,9 +13,10 @@ import useTexture from './gl/useTexture'
 import getUniformLocations from './gl/getUniformLocations'
 
 export type Props = {
-  img1: ?HTMLImageElement,
-  img2: ?HTMLImageElement,
-  matrix: Array<number>,
+  img: ?HTMLImageElement,
+  amount: number,
+  cutoff: number,
+  span: number,
 }
 
 const vertexShaderCode = `
@@ -44,37 +45,44 @@ precision highp float;
 varying vec4 v_position;
 varying vec2 v_texCoord;
 
-uniform sampler2D u_img1;
-uniform sampler2D u_img2;
-uniform mat4 u_matrix;
+uniform sampler2D u_img;
+uniform float u_amount;
+uniform float u_cutoff;
+uniform float u_width;
+uniform float u_height;
+uniform float u_span;
 
 void main() {
-  // gl_FragColor is a special variable a fragment shader
-  // is responsible for setting
-  // gl_FragColor = vec4(1, v_position.x, 0.5, 1); // return redish-purple
-  vec4 color1 = vec4(texture2D(u_img1, v_texCoord).xyz, 1.0) * u_matrix;
-  gl_FragColor = texture2D(u_img2, color1.xy);
+  vec4 left = texture2D(u_img, v_texCoord - vec2(u_span / u_width, 0));
+  vec4 right = texture2D(u_img, v_texCoord + vec2(u_span / u_width, 0));
+  vec4 down = texture2D(u_img, v_texCoord - vec2(0, u_span / u_height));
+  vec4 up = texture2D(u_img, v_texCoord + vec2(0, u_span / u_height));
+  vec2 gradient = vec2(
+    length(right) - length(left),
+    length(up) - length(down)
+  );
+  if (length(gradient) > u_cutoff) {
+    gradient = vec2(0, 0);
+  }
+  gl_FragColor = texture2D(u_img, v_texCoord + gradient * u_amount);
 }
 `
 
-const GLTest = ({ img1, img2, matrix }: Props): React.Node => {
+const InflateGradientRenderer = ({
+  img,
+  amount,
+  cutoff,
+  span,
+}: Props): React.Node => {
   const gl = useGL()
 
-  const tex1 = useTexture()
-  const tex2 = useTexture()
+  const tex = useTexture()
   React.useMemo(
     () => {
-      if (!img1) return
-      texImage(gl, tex1, img1)
+      if (!img) return
+      texImage(gl, tex, img)
     },
-    [img1]
-  )
-  React.useMemo(
-    () => {
-      if (!img2) return
-      texImage(gl, tex2, img2)
-    },
-    [img2]
+    [img]
   )
 
   const vertexShader = useShader(gl.VERTEX_SHADER, vertexShaderCode)
@@ -86,12 +94,22 @@ const GLTest = ({ img1, img2, matrix }: Props): React.Node => {
     'a_position',
     'a_texCoord'
   )
-  const { u_img1, u_img2, u_matrix } = getUniformLocations(
+  const {
+    u_img,
+    u_span,
+    u_amount,
+    u_cutoff,
+    u_width,
+    u_height,
+  } = getUniformLocations(
     gl,
     program,
-    'u_img1',
-    'u_img2',
-    'u_matrix'
+    'u_span',
+    'u_img',
+    'u_amount',
+    'u_cutoff',
+    'u_width',
+    'u_height'
   )
   const positionBuffer = useBuffer()
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
@@ -133,17 +151,16 @@ const GLTest = ({ img1, img2, matrix }: Props): React.Node => {
   gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
 
   gl.useProgram(program)
-  if (img1) {
-    gl.uniform1i(u_img1, 0)
+  if (img) {
+    gl.uniform1i(u_img, 0)
     gl.activeTexture(gl.TEXTURE0)
-    gl.bindTexture(gl.TEXTURE_2D, tex1)
+    gl.bindTexture(gl.TEXTURE_2D, tex)
   }
-  if (img2) {
-    gl.uniform1i(u_img2, 1)
-    gl.activeTexture(gl.TEXTURE1)
-    gl.bindTexture(gl.TEXTURE_2D, tex2)
-  }
-  gl.uniformMatrix4fv(u_matrix, false, matrix)
+  gl.uniform1f(u_width, gl.canvas.width)
+  gl.uniform1f(u_height, gl.canvas.height)
+  gl.uniform1f(u_span, span)
+  gl.uniform1f(u_amount, amount)
+  gl.uniform1f(u_cutoff, cutoff)
   gl.enableVertexAttribArray(a_position)
   {
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
@@ -167,7 +184,7 @@ const GLTest = ({ img1, img2, matrix }: Props): React.Node => {
   return <React.Fragment />
 }
 
-export default GLTest
+export default InflateGradientRenderer
 
 function texImage(
   gl: WebGLRenderingContext,

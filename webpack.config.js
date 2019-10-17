@@ -46,7 +46,8 @@ module.exports = {
     ],
   },
   devServer: {
-    port: 3000,
+    port: 3009,
     contentBase: path.join(__dirname, 'src'),
+    historyApiFallback: true,
   },
 }
