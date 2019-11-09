@@ -1,6 +1,6 @@
 // @flow
 
-import { Map as iMap, Set as iSet } from 'immutable'
+import { Map as iMap, Set as iSet, OrderedSet } from 'immutable'
 import { mapValues } from 'lodash/fp'
 import uuid from 'uuid'
 
@@ -39,11 +39,13 @@ export type SetSelectedNodesAction = {
 
 export type NodesState = {
   +nodes: iMap<string, Node>,
+  +nodesOrder: OrderedSet<string>,
   +selectedNodes: iSet<string>,
 }
 
 export const initNodesState = (): NodesState => ({
   nodes: iMap(),
+  nodesOrder: OrderedSet(),
   selectedNodes: iSet(),
 })
 
@@ -105,17 +107,16 @@ export function createNodesRedux(
 
   const reducer = (state: ?NodesState, action: NodesAction): NodesState => {
     if (!state) state = initNodesState()
-    const { nodes, selectedNodes } = state
+    const { nodes, nodesOrder, selectedNodes } = state
     switch ((action: any).type) {
       case actionTypes.addNodes: {
         const { payload } = ((action: any): AddNodesAction)
+        const newNodes = payload.map(node => ({ ...node, id: uuid() }))
         return {
           nodes: nodes.withMutations(nodes =>
-            payload.forEach((node: AddNode) => {
-              const id = uuid()
-              nodes.set(id, { ...node, id })
-            })
+            newNodes.forEach(node => nodes.set(node.id, node))
           ),
+          nodesOrder: nodesOrder.union(newNodes.map(n => n.id)),
           selectedNodes,
         }
       }
@@ -127,6 +128,7 @@ export function createNodesRedux(
               nodes.update(updates.id, node => ({ ...node, ...updates }))
             )
           ),
+          nodesOrder,
           selectedNodes,
         }
       }
@@ -136,6 +138,7 @@ export function createNodesRedux(
           nodes: nodes.withMutations(nodes =>
             payload.forEach(nodeId => nodes.delete(nodeId))
           ),
+          nodesOrder: nodesOrder.subtract(payload),
           selectedNodes: selectedNodes.subtract(payload),
         }
       }
@@ -143,6 +146,7 @@ export function createNodesRedux(
         const { payload } = ((action: any): SetSelectedNodesAction)
         return {
           nodes,
+          nodesOrder: nodesOrder.subtract(payload).union(payload),
           selectedNodes: iSet(payload).filter(id => nodes.has(id)),
         }
       }

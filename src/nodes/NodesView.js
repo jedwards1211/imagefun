@@ -27,30 +27,25 @@ export type Props = {
 
 const NodesView = ({
   classes,
-  state: { nodes, selectedNodes },
+  state: { nodes, nodesOrder, selectedNodes },
   nodeKinds,
   ...props
 }: Props): React.Node => {
   const children = []
-  nodes.forEach(node =>
-    children.push(
-      React.createElement(nodeKinds[node.kind], {
-        ...node,
-        key: node.id,
-        selected: selectedNodes.has(node.id),
-      })
-    )
-  )
+  nodesOrder.forEach((nodeId: string) => {
+    const node = nodes.get(nodeId)
+    if (node) {
+      children.push(
+        React.createElement(nodeKinds[node.kind], {
+          ...node,
+          key: node.id,
+          selected: selectedNodes.has(node.id),
+        })
+      )
+    }
+  })
   const { setSelectedNodes, updateNodes } = React.useContext(
     NodesActionsContext
-  )
-  const handleClick = React.useCallback(
-    (e: SyntheticMouseEvent<any>) => {
-      if (e.currentTarget === e.target) {
-        setSelectedNodes([])
-      }
-    },
-    [setSelectedNodes]
   )
 
   const stash = useStash()

@@ -9,7 +9,7 @@ import { createNodesRedux, type NodesState } from './nodesRedux'
 import NodesActionsContext from './NodesActionsContext'
 import NodesView from './NodesView'
 import { bindActionCreators } from 'redux'
-import { Map as iMap, Set as iSet } from 'immutable'
+import { Map as iMap, Set as iSet, OrderedSet } from 'immutable'
 import uuid from 'uuid'
 
 export type Props = {}
@@ -32,13 +32,14 @@ const nodeKinds = {
 
 const { actions, reducer } = createNodesRedux()
 
+const initNodes = [
+  { id: uuid(), kind: 'effect', props: {}, left: 100, top: 100 },
+  { id: uuid(), kind: 'effect', props: {}, left: 500, top: 300 },
+]
+
 const initState: NodesState = {
-  nodes: iMap(
-    [
-      { id: uuid(), kind: 'effect', props: {}, left: 100, top: 100 },
-      { id: uuid(), kind: 'effect', props: {}, left: 500, top: 300 },
-    ].map(node => [node.id, node])
-  ),
+  nodes: iMap(initNodes.map(node => [node.id, node])),
+  nodesOrder: OrderedSet(initNodes.map(n => n.id)),
   selectedNodes: iSet(),
 }
 
