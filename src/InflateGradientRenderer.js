@@ -8,30 +8,58 @@ import { useGL } from './gl/GLCanvas'
 import useShader from './gl/useShader'
 import useProgram from './gl/useProgram'
 import getAttribLocations from './gl/getAttribLocations'
-import useBuffer from './gl/useBuffer'
-import useTexture from './gl/useTexture'
 import getUniformLocations from './gl/getUniformLocations'
+import {
+  putUniforms,
+  type Uniforms,
+  glslUniformDeclarations,
+} from './gl/Uniforms'
+
+import useDrawRectangle from './gl/useDrawRectangle'
+import useTexImage from './gl/useTexImage'
+
+export const uniforms: Uniforms = {
+  u_amount: { type: 'float', default: 0, min: -2, max: 2 },
+  u_cutoff: { type: 'float', default: 5, min: 0, max: 5 },
+  u_span: { type: 'float', default: 1, min: -10, max: 10 },
+  u_width: { type: 'float', default: 1 },
+  u_height: { type: 'float', default: 1 },
+  u_x: { type: 'float', default: 0, min: -1, max: 1 },
+  u_y: { type: 'float', default: 0, min: -1, max: 1 },
+  u_rotation: { type: 'float', default: 0, min: -2, max: 2 },
+}
 
 export type Props = {
-  img: ?HTMLImageElement,
-  amount: number,
-  cutoff: number,
-  span: number,
+  img: ?TexImageSource,
+  values: { [$Keys<Uniforms>]: any },
 }
 
 const vertexShaderCode = `
 precision highp float;
 
+${glslUniformDeclarations(uniforms)}
+
 // an attribute will receive data from a buffer
 attribute vec2 a_texCoord;
 attribute vec4 a_position;
-varying vec4 v_position;
+
 varying vec2 v_texCoord;
+
+varying vec2 v_left;
+varying vec2 v_right;
+varying vec2 v_down;
+varying vec2 v_up;
 
 // all shaders have a main function
 void main() {
-  v_position = a_position;
-  v_texCoord = a_texCoord;
+  v_texCoord = a_texCoord + vec2(-u_x, u_y);
+
+  float texelWidth = u_span / u_width;
+  float texelHeight = u_span / u_height;
+  v_left = a_texCoord - vec2(texelWidth, 0);
+  v_right = a_texCoord + vec2(texelWidth, 0);
+  v_down = a_texCoord - vec2(0, texelHeight);
+  v_up = a_texCoord + vec2(0, texelHeight);
 
   // gl_Position is a special variable a vertex shader
   // is responsible for setting
@@ -42,181 +70,78 @@ void main() {
 const fragmentShaderCode = `
 precision highp float;
 
-varying vec4 v_position;
+${glslUniformDeclarations(uniforms)}
+
 varying vec2 v_texCoord;
 
+varying vec2 v_left;
+varying vec2 v_right;
+varying vec2 v_down;
+varying vec2 v_up;
+
 uniform sampler2D u_img;
-uniform float u_amount;
-uniform float u_cutoff;
-uniform float u_width;
-uniform float u_height;
-uniform float u_span;
+
+vec2 rotate(vec2 v, float a) {
+	float s = sin(a);
+	float c = cos(a);
+	mat2 m = mat2(c, -s, s, c);
+	return m * v;
+}
 
 void main() {
-  vec4 left = texture2D(u_img, v_texCoord - vec2(u_span / u_width, 0));
-  vec4 right = texture2D(u_img, v_texCoord + vec2(u_span / u_width, 0));
-  vec4 down = texture2D(u_img, v_texCoord - vec2(0, u_span / u_height));
-  vec4 up = texture2D(u_img, v_texCoord + vec2(0, u_span / u_height));
+  vec4 left = texture2D(u_img, v_left);
+  vec4 right = texture2D(u_img, v_right);
+  vec4 down = texture2D(u_img, v_down);
+  vec4 up = texture2D(u_img, v_up);
   vec2 gradient = vec2(
     length(right) - length(left),
     length(up) - length(down)
   );
+  gradient = rotate(gradient, u_rotation);
   if (length(gradient) > u_cutoff) {
     gradient = vec2(0, 0);
   }
-  gl_FragColor = texture2D(u_img, v_texCoord + gradient * u_amount);
+  vec4 color = texture2D(u_img, v_texCoord + gradient * u_amount);
+  gl_FragColor = color;
 }
 `
 
-const InflateGradientRenderer = ({
-  img,
-  amount,
-  cutoff,
-  span,
-}: Props): React.Node => {
+const InflateGradientRenderer = ({ img, values }: Props): React.Node => {
   const gl = useGL()
-
-  const tex = useTexture()
-  React.useMemo(
-    () => {
-      if (!img) return
-      texImage(gl, tex, img)
-    },
-    [img]
-  )
+  const tex = useTexImage(img)
 
   const vertexShader = useShader(gl.VERTEX_SHADER, vertexShaderCode)
   const fragmentShader = useShader(gl.FRAGMENT_SHADER, fragmentShaderCode)
   const program = useProgram(vertexShader, fragmentShader)
-  const { a_position, a_texCoord } = getAttribLocations(
-    gl,
-    program,
-    'a_position',
-    'a_texCoord'
-  )
-  const {
-    u_img,
-    u_span,
-    u_amount,
-    u_cutoff,
-    u_width,
-    u_height,
-  } = getUniformLocations(
-    gl,
-    program,
-    'u_span',
-    'u_img',
-    'u_amount',
-    'u_cutoff',
-    'u_width',
-    'u_height'
-  )
-  const positionBuffer = useBuffer()
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-  React.useMemo(
-    () => {
-      setRectangle(gl, -1, 1, 2, -2)
-    },
-    [positionBuffer]
-  )
 
-  const texCoordBuffer = useBuffer()
-  React.useMemo(
-    () => {
-      gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer)
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          0.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
-          0.0,
-          1.0,
-          1.0,
-        ]),
-        gl.STATIC_DRAW
-      )
-    },
-    [texCoordBuffer]
-  )
+  const { width, height } = gl.canvas
 
   gl.clearColor(0, 0, 0, 0)
   gl.clear(gl.COLOR_BUFFER_BIT)
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
+  gl.viewport(0, 0, width, height)
 
   gl.useProgram(program)
   if (img) {
+    const { u_img } = getUniformLocations(gl, program, 'u_img')
     gl.uniform1i(u_img, 0)
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, tex)
   }
-  gl.uniform1f(u_width, gl.canvas.width)
-  gl.uniform1f(u_height, gl.canvas.height)
-  gl.uniform1f(u_span, span)
-  gl.uniform1f(u_amount, amount)
-  gl.uniform1f(u_cutoff, cutoff)
-  gl.enableVertexAttribArray(a_position)
-  {
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-    // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-    const size = 2 // 2 components per iteration
-    const type = gl.FLOAT // the data is 32bit floats
-    const normalize = false // don't normalize the data
-    const stride = 0 // 0 = move forward size * sizeof(type) each iteration to get the next position
-    const offset = 0 // start at the beginning of the buffer
-    gl.vertexAttribPointer(a_position, size, type, normalize, stride, offset)
-  }
-  gl.enableVertexAttribArray(a_texCoord)
-  gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer)
-  gl.vertexAttribPointer(a_texCoord, 2, gl.FLOAT, false, 0, 0)
-  {
-    const primitiveType = gl.TRIANGLES
-    const offset = 0
-    const count = 6
-    gl.drawArrays(primitiveType, offset, count)
-  }
+  putUniforms(gl, program, uniforms, {
+    ...values,
+    u_width: width,
+    u_height: height,
+  })
+  const drawRectangle = useDrawRectangle()
+  drawRectangle({
+    ...getAttribLocations(gl, program, 'a_position', 'a_texCoord'),
+    x: -1,
+    y: 1,
+    width: 2,
+    height: -2,
+  })
+
   return <React.Fragment />
 }
 
 export default InflateGradientRenderer
-
-function texImage(
-  gl: WebGLRenderingContext,
-  texture: WebGLTexture,
-  image: HTMLImageElement
-) {
-  gl.bindTexture(gl.TEXTURE_2D, texture)
-
-  // Set the parameters so we can render any size image.
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-
-  // Upload the image into the texture.
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
-}
-
-function setRectangle(
-  gl: WebGLRenderingContext,
-  x: number,
-  y: number,
-  width: number,
-  height: number
-) {
-  var x1 = x
-  var x2 = x + width
-  var y1 = y
-  var y2 = y + height
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Float32Array([x1, y1, x2, y1, x1, y2, x1, y2, x2, y1, x2, y2]),
-    gl.STATIC_DRAW
-  )
-}

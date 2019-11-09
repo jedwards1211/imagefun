@@ -99,7 +99,7 @@ const Slider = ({ value, onChange, min, max, classes }: Props): React.Node => {
     <div
       className={classes.root}
       onMouseDown={handleRootMouseDown}
-      ref={rootRef}
+      ref={(rootRef: any)}
     >
       <div className={classes.track}>
         <div
