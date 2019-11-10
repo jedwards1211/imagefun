@@ -21,6 +21,9 @@ import { type Direction } from './Direction'
 
 import NodesActionsContext from './NodesActionsContext'
 
+import { withStyles } from '@material-ui/core/styles'
+import { type Theme } from '../theme'
+
 const Box = styled('div')(
   compose(
     borders,
@@ -31,19 +34,38 @@ const Box = styled('div')(
   )
 )
 
+type Classes<Styles> = $Call<<T>((any) => T) => { [$Keys<T>]: string }, Styles>
+
+const styles = (theme: Theme) => ({
+  root: {},
+  selected: {},
+  knob: {
+    borderColor: '#555',
+    '$selected &': {
+      borderColor: 'hsl(78, 100%, 30%)',
+    },
+    '$root:hover &': {
+      borderColor: 'hsl(78, 100%, 40%)',
+    },
+  },
+})
+
 export type Props = {
   +direction: Direction,
   +side: 'top' | 'left' | 'bottom' | 'right',
   +name: string,
   +className?: ?string,
-  +classes?: ?$Shape<{ root: string, knob: string }>,
+  +classes: Classes<typeof styles>,
 }
 
 const size = 8
 const borderWidth = 1
+const padding = size
+const totalSize = size + padding
 
 const border = `${borderWidth}px solid #555`
 const offset = -size / 2 - borderWidth
+const totalOffset = -size / 2 - padding / 2 - borderWidth
 
 const Terminal = ({
   direction,
@@ -101,7 +123,9 @@ const Terminal = ({
       width={0}
       height={0}
       position="relative"
-      className={classNames(classes?.root, className)}
+      className={classNames(classes.root, className, {
+        [classes.selected]: selected,
+      })}
       ref={ref}
       {...props}
     >
@@ -109,18 +133,26 @@ const Terminal = ({
         display="inline-block"
         bgcolor="white"
         border={border}
-        borderColor={selected ? 'hsl(78, 100%, 30%)' : '#555'}
         borderRadius="100%"
         position="absolute"
         top={offset}
         left={offset}
         width={size}
         height={size}
-        className={classes?.knob}
+        className={classes.knob}
+      />
+      <Box
+        position="absolute"
+        top={totalOffset}
+        left={totalOffset}
+        width={totalSize}
+        height={totalSize}
         onMouseDown={handleMouseDown}
       />
     </Box>
   )
 }
 
-export default Terminal
+const TerminalWithStyles = withStyles(styles)(Terminal)
+
+export default TerminalWithStyles
