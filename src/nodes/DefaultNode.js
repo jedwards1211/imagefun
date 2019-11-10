@@ -110,7 +110,6 @@ const DefaultNode = ({
     <NodeBox
       selected={selected}
       classes={{ root: classes.root, selected: classes.selected }}
-      data-nodeid={id}
     >
       {inputs && (
         <div className={classes.inputs}>

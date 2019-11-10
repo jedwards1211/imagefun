@@ -6,7 +6,9 @@
 import * as React from 'react'
 import { withStyles } from '@material-ui/core/styles'
 
-const height = 30
+import useStash from './hooks/useStash'
+
+const height = 20
 const trackHeight = 6
 const knobSize = 10
 
@@ -66,6 +68,7 @@ export type Props = {
 const Slider = ({ value, onChange, min, max, classes }: Props): React.Node => {
   const fzero = Math.max(0, Math.min(100, (-min / (max - min)) * 100))
   const fvalue = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100))
+  const stash = useStash({ min, max })
   const rootRef = React.useRef()
   const onChangeRef = React.useRef()
   onChangeRef.current = onChange
@@ -73,6 +76,7 @@ const Slider = ({ value, onChange, min, max, classes }: Props): React.Node => {
     const slider = rootRef.current
     const onChange = onChangeRef.current
     if (!onChange || !slider) return
+    const { min, max } = stash
     const rect = slider.getBoundingClientRect()
     const f = (e.clientX - rect.x) / rect.width
     const rf = 1 - f

@@ -68,6 +68,7 @@ const NodeContainer = ({
       <div
         style={{ position: 'absolute', left, top }}
         onMouseDown={handleMouseDown}
+        data-nodeid={id}
       >
         {children}
       </div>

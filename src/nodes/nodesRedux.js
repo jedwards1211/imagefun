@@ -7,20 +7,37 @@ import {
   Record,
   type RecordOf,
 } from 'immutable'
-import { mapValues } from 'lodash/fp'
+import { mapValues, groupBy, forEach } from 'lodash/fp'
 import uuid from 'uuid'
 
 import { type Direction } from './Direction'
 
-export type Node = {
+import { pipeline } from '../util/pipeline'
+
+export type NodeWires = iMap<string, iSet<string>>
+
+export type NodeFields = {
   +id: string,
   +kind: string,
   +props: Object,
   +left: number,
   +top: number,
-  +inputWires?: ?iSet<string>,
-  +outputWires?: ?iSet<string>,
+  +input: NodeWires,
+  +output: NodeWires,
 }
+
+export type Node = RecordOf<NodeFields>
+export const NodeRecord = Record(
+  ({
+    id: '',
+    kind: '',
+    props: {},
+    left: 0,
+    top: 0,
+    input: iMap(),
+    output: iMap(),
+  }: NodeFields)
+)
 
 export type NodeAndTerminal = {
   +node: string,
@@ -42,7 +59,7 @@ export type AddNode = {
 
 export type AddNodesAction = {
   +type: string,
-  +payload: $ReadOnlyArray<AddNode>,
+  +payload: Iterable<AddNode>,
 }
 export type UpdateNode = {
   +id: string,
@@ -53,11 +70,11 @@ export type UpdateNode = {
 }
 export type UpdateNodesAction = {
   +type: string,
-  +payload: $ReadOnlyArray<UpdateNode>,
+  +payload: Iterable<UpdateNode>,
 }
 export type DeleteNodesAction = {
   +type: string,
-  +payload: $ReadOnlyArray<string>,
+  +payload: Iterable<string>,
 }
 export type SetSelectedNodesAction = {
   +type: string,
@@ -70,25 +87,25 @@ export type ConnectWire = {
 }
 export type ConnectAction = {
   +type: string,
-  +payload: $ReadOnlyArray<ConnectWire>,
+  +payload: Iterable<ConnectWire>,
 }
 export type DisconnectWire = {
   +from?: {
     +node: string,
-    +terminal?: string,
+    +terminal: string,
   },
   +to?: {
     +node: string,
-    +terminal?: string,
+    +terminal: string,
   },
 }
 export type DisconnectAction = {
   +type: string,
-  +payload: $ReadOnlyArray<DisconnectWire>,
+  +payload: Iterable<DisconnectWire>,
 }
 export type DeleteWiresAction = {
   +type: string,
-  +payload: $ReadOnlyArray<string>,
+  +payload: Iterable<string>,
 }
 
 export type ClearSelectionAction = {
@@ -110,12 +127,45 @@ export type SetSelectedTerminalsAction = {
 }
 export type DisconnectTerminalsAction = {
   +type: string,
-  +payload: $ReadOnlyArray<TerminalPath>,
+  +payload: Iterable<TerminalPath>,
 }
 
 export type Nodes = iMap<string, Node>
 
 export type SelectedTerminals = iMap<string, iMap<string, iSet<string>>>
+
+function* getNodeWires(
+  node: ?Node,
+  direction?: Direction,
+  terminal?: string
+): Iterable<string> {
+  if (!node) return
+  if (direction) {
+    if (terminal) {
+      const wires = node.getIn([direction, terminal])
+      if (wires) yield* wires
+      return
+    }
+    for (const wires of node[direction].values()) {
+      yield* wires
+    }
+  }
+  for (const wires of node.input.values()) {
+    yield* wires
+  }
+  for (const wires of node.output.values()) {
+    yield* wires
+  }
+}
+
+function* flatMapIterable<I, O>(
+  input: Iterable<I>,
+  iteratee: I => Iterable<O>
+): Iterable<O> {
+  for (const item of input) {
+    yield* iteratee(item)
+  }
+}
 
 function* flattenSelectedTerminals(
   selectedTerminals: SelectedTerminals
@@ -127,6 +177,72 @@ function* flattenSelectedTerminals(
     }
   }
 }
+
+const _deleteNodeWires = (
+  nodeId: string,
+  nodeWires: NodeWires,
+  deletedWires: Array<{
+    node: string,
+    direction: Direction,
+    terminal: string,
+    wireId: string,
+  }>,
+  _direction: Direction
+) =>
+  nodeWires.withMutations((nodeWires: NodeWires) => {
+    for (const { node, direction, terminal, wireId } of deletedWires) {
+      if (node !== nodeId || direction !== _direction) continue
+      nodeWires.deleteIn([terminal, wireId])
+    }
+  })
+
+const deleteNodeWires = (
+  wires: Array<{
+    node: string,
+    direction: Direction,
+    terminal: string,
+    wireId: string,
+  }>
+) => (node: ?Node) =>
+  node &&
+  node.merge({
+    input: _deleteNodeWires(node.id, node.input, wires, 'input'),
+    output: _deleteNodeWires(node.id, node.output, wires, 'output'),
+  })
+
+const _addNodeWires = (
+  nodeId: string,
+  nodeWires: NodeWires,
+  addedWires: Array<{
+    node: string,
+    direction: Direction,
+    terminal: string,
+    wireId: string,
+  }>,
+  _direction: Direction
+) =>
+  nodeWires.withMutations((nodeWires: NodeWires) => {
+    for (const { node, direction, terminal, wireId } of addedWires) {
+      if (node !== nodeId || direction !== _direction) continue
+      nodeWires.update(terminal, (wires: iSet<string> = iSet()) =>
+        wires.add(wireId)
+      )
+    }
+  })
+
+const addNodeWires = (
+  wires: Array<{
+    node: string,
+    direction: Direction,
+    terminal: string,
+    wireId: string,
+  }>
+) => (node: ?Node) =>
+  node &&
+  node.merge({
+    input: _addNodeWires(node.id, node.input, wires, 'input'),
+    output: _addNodeWires(node.id, node.output, wires, 'output'),
+  })
 
 export type NodesStateFields = {
   +nodes: Nodes,
@@ -190,12 +306,12 @@ export type NodesActionTypes = {
 }
 
 export type NodesActions = {
-  addNodes: (...nodes: $ReadOnlyArray<AddNode>) => AddNodesAction,
-  updateNodes: (...nodes: $ReadOnlyArray<UpdateNode>) => UpdateNodesAction,
-  deleteNodes: (...nodes: $ReadOnlyArray<string>) => DeleteNodesAction,
-  deleteWires: (...nodes: $ReadOnlyArray<string>) => DeleteWiresAction,
+  addNodes: (nodes: Iterable<AddNode>) => AddNodesAction,
+  updateNodes: (nodes: Iterable<UpdateNode>) => UpdateNodesAction,
+  deleteNodes: (nodes: Iterable<string>) => DeleteNodesAction,
+  deleteWires: (nodes: Iterable<string>) => DeleteWiresAction,
   disconnectTerminals: (
-    ...nodes: $ReadOnlyArray<TerminalPath>
+    nodes: Iterable<TerminalPath>
   ) => DisconnectTerminalsAction,
   deleteSelected: () => DeleteSelectedAction,
   setSelectedNodes: (nodes: Iterable<string>) => SetSelectedNodesAction,
@@ -214,8 +330,8 @@ export type NodesActions = {
     terminals: Iterable<TerminalPath>
   ) => SetSelectedTerminalsAction,
   clearSelection: () => ClearSelectionAction,
-  connect: (...wires: $ReadOnlyArray<ConnectWire>) => ConnectAction,
-  disconnect: (...wires: $ReadOnlyArray<DisconnectWire>) => DisconnectAction,
+  connect: (wires: Iterable<ConnectWire>) => ConnectAction,
+  disconnect: (wires: Iterable<DisconnectWire>) => DisconnectAction,
 }
 
 export type NodesAction =
@@ -263,24 +379,24 @@ export function createNodesRedux(
   })
 
   const actions = {
-    addNodes: (...nodes: $ReadOnlyArray<AddNode>): AddNodesAction => ({
+    addNodes: (nodes: Iterable<AddNode>): AddNodesAction => ({
       type: actionTypes.addNodes,
       payload: nodes,
     }),
-    updateNodes: (...nodes: $ReadOnlyArray<UpdateNode>): UpdateNodesAction => ({
+    updateNodes: (nodes: Iterable<UpdateNode>): UpdateNodesAction => ({
       type: actionTypes.updateNodes,
       payload: nodes,
     }),
-    deleteNodes: (...nodes: $ReadOnlyArray<string>): DeleteNodesAction => ({
+    deleteNodes: (nodes: Iterable<string>): DeleteNodesAction => ({
       type: actionTypes.deleteNodes,
       payload: nodes,
     }),
-    deleteWires: (...wires: $ReadOnlyArray<string>): DeleteWiresAction => ({
+    deleteWires: (wires: Iterable<string>): DeleteWiresAction => ({
       type: actionTypes.deleteWires,
       payload: wires,
     }),
     disconnectTerminals: (
-      ...terminals: $ReadOnlyArray<TerminalPath>
+      terminals: Iterable<TerminalPath>
     ): DisconnectTerminalsAction => ({
       type: actionTypes.disconnectTerminals,
       payload: terminals,
@@ -333,13 +449,11 @@ export function createNodesRedux(
     clearSelection: (): ClearSelectionAction => ({
       type: actionTypes.clearSelection,
     }),
-    connect: (...wires: $ReadOnlyArray<ConnectWire>): ConnectAction => ({
+    connect: (wires: Iterable<ConnectWire>): ConnectAction => ({
       type: actionTypes.connect,
       payload: wires,
     }),
-    disconnect: (
-      ...wires: $ReadOnlyArray<DisconnectWire>
-    ): DisconnectAction => ({
+    disconnect: (wires: Iterable<DisconnectWire>): DisconnectAction => ({
       type: actionTypes.disconnect,
       payload: wires,
     }),
@@ -358,7 +472,15 @@ export function createNodesRedux(
     switch ((action: any).type) {
       case actionTypes.addNodes: {
         const { payload } = ((action: any): AddNodesAction)
-        const newNodes = payload.map(node => ({ ...node, id: uuid() }))
+        const newNodes = []
+        for (const node of payload) {
+          newNodes.push(
+            NodeRecord({
+              ...node,
+              id: uuid(),
+            })
+          )
+        }
         return state.merge({
           nodes: nodes.withMutations(nodes =>
             newNodes.forEach(node => nodes.set(node.id, node))
@@ -370,47 +492,54 @@ export function createNodesRedux(
         const { payload } = ((action: any): UpdateNodesAction)
         return state.set(
           'nodes',
-          nodes.withMutations(nodes =>
-            payload.forEach(updates =>
-              nodes.update(updates.id, node => ({ ...node, ...updates }))
-            )
-          )
+          nodes.withMutations((nodes: Nodes) => {
+            for (const updates of payload) {
+              nodes.update(updates.id, node => node.merge(updates))
+            }
+          })
         )
       }
       case actionTypes.deleteNodes: {
         const { payload } = ((action: any): DeleteNodesAction)
+        const deletedWires = flatMapIterable(payload, nodeId =>
+          getNodeWires(nodes.get(nodeId))
+        )
         return state.merge({
-          nodes: nodes.withMutations(nodes =>
-            payload.forEach(nodeId => nodes.delete(nodeId))
-          ),
+          nodes: nodes.deleteAll(payload),
           nodesOrder: nodesOrder.subtract(payload),
           selectedNodes: selectedNodes.subtract(payload),
+          selectedWires: selectedWires.subtract(deletedWires),
+          selectedTerminals: selectedTerminals.deleteAll(payload),
+          wires: wires.deleteAll(deletedWires),
         })
       }
       case actionTypes.deleteWires: {
         const { payload } = ((action: any): DeleteWiresAction)
         return state.merge({
           nodes: nodes.withMutations((nodes: iMap<string, Node>) => {
-            for (const wireId of payload) {
-              const wire: ?Wire = wires.get(wireId)
-              if (!wire) return
-              nodes.update(
-                wire.from.node,
-                node =>
-                  node && {
-                    ...node,
-                    outputWires: (node.outputWires || iSet()).delete(wireId),
-                  }
+            const deletedWires = [...payload]
+              .map(wireId => wires.get(wireId))
+              .filter(Boolean)
+            pipeline(
+              [
+                ...deletedWires.map(({ id, from: { node, terminal } }) => ({
+                  node,
+                  direction: 'output',
+                  terminal,
+                  wireId: id,
+                })),
+                ...deletedWires.map(({ id, to: { node, terminal } }) => ({
+                  node,
+                  direction: 'input',
+                  terminal,
+                  wireId: id,
+                })),
+              ],
+              groupBy(item => item.node),
+              forEach(wires =>
+                nodes.update(wires[0].node, deleteNodeWires(wires))
               )
-              nodes.update(
-                wire.to.node,
-                node =>
-                  node && {
-                    ...node,
-                    inputWires: (node.inputWires || iSet()).delete(wireId),
-                  }
-              )
-            }
+            )
           }),
           wires: wires.deleteAll(payload),
           selectedWires: selectedWires.subtract(payload),
@@ -422,39 +551,33 @@ export function createNodesRedux(
         for (const [nodeId, direction, terminal] of payload) {
           const node: ?Node = nodes.get(nodeId)
           if (!node) continue
-          const nodeWires =
-            direction === 'input' ? node.inputWires : node.outputWires
-          if (!nodeWires) continue
-          for (const wireId of nodeWires) {
-            const wire: ?Wire = wires.get(wireId)
-            if (
-              wire &&
-              (direction === 'input' ? wire.to : wire.from).terminal ===
-                terminal
-            ) {
-              wiresToDelete.push(wireId)
-            }
+          for (const wire of getNodeWires(
+            nodes.get(nodeId),
+            direction,
+            terminal
+          )) {
+            wiresToDelete.push(wire)
           }
         }
-        return reducer(state, actions.deleteWires(...wiresToDelete))
+        return reducer(state, actions.deleteWires(wiresToDelete))
       }
       case actionTypes.deleteSelected: {
         let nextState = state
         if (state.selectedNodes.size)
           nextState = reducer(
             nextState,
-            actions.deleteNodes(...state.selectedNodes)
+            actions.deleteNodes(state.selectedNodes)
           )
         if (state.selectedWires.size)
           nextState = reducer(
             nextState,
-            actions.deleteWires(...state.selectedWires)
+            actions.deleteWires(state.selectedWires)
           )
         if (state.selectedTerminals.size)
           nextState = reducer(
             nextState,
             actions.disconnectTerminals(
-              ...flattenSelectedTerminals(state.selectedTerminals)
+              flattenSelectedTerminals(state.selectedTerminals)
             )
           )
         return nextState
@@ -580,41 +703,47 @@ export function createNodesRedux(
         })
       case actionTypes.connect: {
         const { payload } = ((action: any): ConnectAction)
-        const wiresWithId = payload
-          .map(({ from, to }) => ({
-            id: JSON.stringify([
-              from.node,
-              from.terminal,
-              to.node,
-              to.terminal,
-            ]),
-            from,
-            to,
-          }))
-          .filter(wire => !wires.has(wire.id))
+        const addedWires = []
+        for (const { from, to } of payload) {
+          const id = JSON.stringify([
+            from.node,
+            from.terminal,
+            to.node,
+            to.terminal,
+          ])
+          if (!wires.has(id)) {
+            addedWires.push({ id, from, to })
+          }
+        }
         return state.merge({
-          nodes: nodes.withMutations(nodes =>
-            wiresWithId.forEach((wire: Wire) => {
-              const { from, to } = wire
-              nodes.update(from.node, node => ({
-                ...node,
-                outputWires: (node.outputWires || iSet()).add(wire.id),
-              }))
-              nodes.update(to.node, node => ({
-                ...node,
-                inputWires: (node.inputWires || iSet()).add(wire.id),
-              }))
-            })
-          ),
+          nodes: nodes.withMutations((nodes: Nodes) => {
+            pipeline(
+              [
+                ...addedWires.map(({ id, from: { node, terminal } }) => ({
+                  node,
+                  direction: 'output',
+                  terminal,
+                  wireId: id,
+                })),
+                ...addedWires.map(({ id, to: { node, terminal } }) => ({
+                  node,
+                  direction: 'input',
+                  terminal,
+                  wireId: id,
+                })),
+              ],
+              groupBy(item => item.node),
+              forEach(wires => nodes.update(wires[0].node, addNodeWires(wires)))
+            )
+          }),
           wires: wires.withMutations(wires =>
-            wiresWithId.forEach(wire => wires.set(wire.id, wire))
+            addedWires.forEach(wire => wires.set(wire.id, wire))
           ),
         })
       }
       case actionTypes.disconnect: {
         const { payload } = ((action: any): DisconnectAction)
-        const mutableNodes = nodes.asMutable()
-        const mutableWires = wires.asMutable()
+        const wiresToDelete = []
 
         for (const { from, to } of payload) {
           if (from && to) {
@@ -624,58 +753,20 @@ export function createNodesRedux(
               to.node,
               to.terminal,
             ])
-            mutableWires.delete(wireId)
-            mutableNodes.update(from.node, node => ({
-              ...node,
-              outputWires: (node.outputWires || iSet()).delete(wireId),
-            }))
-            mutableNodes.update(to.node, node => ({
-              ...node,
-              inputWires: (node.inputWires || iSet()).delete(wireId),
-            }))
+            wiresToDelete.push(wireId)
           } else if (from) {
-            const node = nodes.get(from.node)
-            if (node && node.outputWires) {
-              const { outputWires, ...rest } = node
-              if (from.terminal) {
-                const removed = outputWires.filter(
-                  wireId => wires.get(wireId)?.from.terminal === from.terminal
-                )
-                mutableWires.deleteAll(removed)
-                mutableNodes.set(from.node, {
-                  ...rest,
-                  outputWires: outputWires.subtract(removed),
-                })
-              } else {
-                mutableWires.deleteAll(outputWires)
-                mutableNodes.set(from.node, rest)
-              }
+            const wires = nodes.getIn([from.node, 'output', from.terminal])
+            if (wires) {
+              for (const wire of wires) wiresToDelete.push(wire)
             }
           } else if (to) {
-            const node = nodes.get(to.node)
-            if (node && node.inputWires) {
-              const { inputWires, ...rest } = node
-              if (to.terminal) {
-                const removed = inputWires.filter(
-                  wireId => wires.get(wireId)?.from.terminal === to.terminal
-                )
-                mutableWires.deleteAll(removed)
-                mutableNodes.set(to.node, {
-                  ...rest,
-                  inputWires: inputWires.subtract(removed),
-                })
-              } else {
-                mutableWires.deleteAll(inputWires)
-                mutableNodes.set(to.node, rest)
-              }
+            const wires = nodes.getIn([to.node, 'input', to.terminal])
+            if (wires) {
+              for (const wire of wires) wiresToDelete.push(wire)
             }
           }
         }
-
-        return state.merge({
-          nodes: mutableNodes.asImmutable(),
-          wires: mutableWires.asImmutable(),
-        })
+        return reducer(state, actions.deleteWires(wiresToDelete))
       }
     }
     return state

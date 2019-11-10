@@ -144,7 +144,7 @@ const NodesView = ({
             const dx = event.clientX - lastEvent.clientX
             const dy = event.clientY - lastEvent.clientY
             updateNodes(
-              ...[...selectedNodes]
+              selectedNodes
                 .map(
                   (id: string): ?UpdateNode => {
                     const node = nodes.get(id)
@@ -160,10 +160,12 @@ const NodesView = ({
           case 'mouseup': {
             stash.dragFrom = null
             if (dragTo && dragTo.node) {
-              connect({
-                from: dragFrom.direction === 'output' ? dragFrom : dragTo,
-                to: dragTo.direction === 'output' ? dragFrom : dragTo,
-              })
+              connect([
+                {
+                  from: dragFrom.direction === 'output' ? dragFrom : dragTo,
+                  to: dragTo.direction === 'output' ? dragFrom : dragTo,
+                },
+              ])
             }
             setDragTo(null)
           }
@@ -202,7 +204,7 @@ const NodesView = ({
           top={node.top}
         >
           {React.createElement(nodeKinds[node.kind], {
-            ...node,
+            ...node.toObject(),
             selected,
           })}
         </NodeContainer>
