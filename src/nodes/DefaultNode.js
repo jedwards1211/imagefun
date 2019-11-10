@@ -8,7 +8,6 @@ import classNames from 'classnames'
 import { withStyles } from '@material-ui/core/styles'
 import { type Theme } from '../theme'
 import Terminal from './Terminal'
-import NodeContainer from './NodeContainer'
 import NodeBox from './NodeBox'
 
 type Classes<Styles> = $Call<<T>((any) => T) => { [$Keys<T>]: string }, Styles>
@@ -76,11 +75,6 @@ const styles = (theme: Theme) => ({
     marginLeft: theme.spacing(1),
     marginRight: -4 - theme.spacing(1),
   },
-  terminalKnob: {
-    '$selected &': {
-      borderColor: 'hsl(78, 100%, 25%)',
-    },
-  },
 })
 
 export type Props = {
@@ -89,10 +83,8 @@ export type Props = {
   +inputs?: ?$ReadOnlyArray<Input>,
   +outputs?: ?$ReadOnlyArray<Output>,
   +children?: ?React.Node,
-  +selected?: ?boolean,
   +classes: Classes<typeof styles>,
-  +left?: ?number,
-  +top?: ?number,
+  +selected?: ?boolean,
 }
 
 export type Input = {
@@ -109,69 +101,63 @@ const DefaultNode = ({
   name,
   inputs,
   outputs,
-  selected,
   children,
-  left,
-  top,
+  selected,
 }: Props): React.Node => {
   const nameVertical =
     (inputs && inputs.length > 3) || (outputs && outputs.length > 3)
   return (
-    <NodeContainer id={id} selected={selected} left={left} top={top}>
-      <NodeBox
-        selected={selected}
-        classes={{ root: classes.root, selected: classes.selected }}
-        d-nodeid={id}
-      >
-        {inputs && (
-          <div className={classes.inputs}>
-            {inputs.map(({ name }) => (
-              <div key={name} className={classes.input}>
-                <Terminal
-                  name={name}
-                  direction="input"
-                  side="left"
-                  classes={{
-                    root: classes.inputTerminal,
-                    knob: classes.terminalKnob,
-                  }}
-                />
-                {name}
-              </div>
-            ))}
-          </div>
-        )}
-        <div className={classes.content}>
-          {children ?? (
-            <div
-              className={classNames(classes.name, {
-                [classes.nameVertical]: nameVertical,
-              })}
-            >
+    <NodeBox
+      selected={selected}
+      classes={{ root: classes.root, selected: classes.selected }}
+      data-nodeid={id}
+    >
+      {inputs && (
+        <div className={classes.inputs}>
+          {inputs.map(({ name }) => (
+            <div key={name} className={classes.input}>
+              <Terminal
+                name={name}
+                direction="input"
+                side="left"
+                classes={{
+                  root: classes.inputTerminal,
+                }}
+              />
               {name}
             </div>
-          )}
+          ))}
         </div>
-        {outputs && (
-          <div className={classes.outputs}>
-            {outputs.map(({ name }) => (
-              <div key={name} className={classes.output}>
-                {name}
-                <Terminal
-                  name={name}
-                  direction="output"
-                  side="right"
-                  classes={{
-                    root: classes.outputTerminal,
-                    knob: classes.terminalKnob,
-                  }}
-                />
-              </div>
-            ))}
+      )}
+      <div className={classes.content}>
+        {children ?? (
+          <div
+            className={classNames(classes.name, {
+              [classes.nameVertical]: nameVertical,
+            })}
+          >
+            {name}
           </div>
         )}
-      </NodeBox>
-    </NodeContainer>
+      </div>
+      {outputs && (
+        <div className={classes.outputs}>
+          {outputs.map(({ name }) => (
+            <div key={name} className={classes.output}>
+              {name}
+              <Terminal
+                name={name}
+                direction="output"
+                side="right"
+                classes={{
+                  root: classes.outputTerminal,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </NodeBox>
   )
 }
 

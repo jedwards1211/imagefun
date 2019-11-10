@@ -8,7 +8,7 @@ export default function getAttribLocations<Name: string>(
   program: WebGLProgram,
   ...names: Array<Name>
 ): { [Name]: number } {
-  const result = {}
+  const result: { [Name]: number } = ({}: any)
   names.forEach(name => (result[name] = gl.getAttribLocation(program, name)))
   return result
 }

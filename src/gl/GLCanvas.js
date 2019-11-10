@@ -7,6 +7,7 @@ import * as React from 'react'
 
 export type Props = {
   +children?: ?React.Node,
+  ...,
 }
 
 export const GLContext: React.Context<?WebGLRenderingContext> = React.createContext(
@@ -27,7 +28,7 @@ type State = {
 export default class GLCanvas extends React.Component<Props, State> {
   state: State = { gl: null, error: null }
 
-  static getDerivedStateFromError(error: Error) {
+  static getDerivedStateFromError(error: Error): $Shape<State> {
     // Update state so the next render will show the fallback UI.
     return { error }
   }

@@ -4,53 +4,69 @@ import * as React from 'react'
 import { withStyles } from '@material-ui/core/styles'
 import { type Theme } from '../theme'
 import { type NodesState, type UpdateNode } from './nodesRedux'
-
 import NodesActionsContext from './NodesActionsContext'
 import useStash from '../hooks/useStash'
 import useMouseDrag from '../hooks/useMouseDrag'
-
 import { pick } from 'lodash/fp'
+import { findParentNodeId } from './findParentNodeEl'
+import { TerminalOffsetsProvider } from './TerminalOffsetsContext'
+import { type Wire as WireState } from './nodesRedux'
+import Wire from './Wire'
 
-import findParentNodeEl from './findParentNodeEl'
+import NodeContainer from './NodeContainer'
+
+import { findParentWireId } from './findParentWireEl'
 
 type Classes<Styles> = $Call<<T>((any) => T) => { [$Keys<T>]: string }, Styles>
 
 const styles = (theme: Theme) => ({
-  root: {},
+  root: {
+    position: 'relative',
+  },
+  wire: {
+    stroke: '#555',
+    '&:hover': {
+      stroke: 'hsl(78, 100%, 45%)',
+    },
+  },
+  wireSelected: {
+    stroke: 'hsl(78, 100%, 40%)',
+    '&:hover': {
+      stroke: 'hsl(78, 100%, 45%)',
+    },
+  },
 })
 
 export type Props = {
   +classes: Classes<typeof styles>,
   +state: NodesState,
   +nodeKinds: { [string]: React.ComponentType<any> },
+  +style?: ?Object,
+  +width: number,
+  +height: number,
 }
 
 const NodesView = ({
   classes,
-  state: { nodes, nodesOrder, selectedNodes },
+  state: {
+    nodes,
+    nodesOrder,
+    selectedNodes,
+    wires,
+    selectedWires,
+    selectedTerminals,
+  },
   nodeKinds,
+  width,
+  height,
+  style,
   ...props
 }: Props): React.Node => {
-  const children = []
-  nodesOrder.forEach((nodeId: string) => {
-    const node = nodes.get(nodeId)
-    if (node) {
-      children.push(
-        React.createElement(nodeKinds[node.kind], {
-          ...node,
-          key: node.id,
-          selected: selectedNodes.has(node.id),
-        })
-      )
-    }
-  })
-  const { setSelectedNodes, updateNodes } = React.useContext(
+  const { clearSelection, updateNodes, deleteSelected } = React.useContext(
     NodesActionsContext
   )
 
-  const stash = useStash()
-  stash.nodes = nodes
-  stash.selectedNodes = selectedNodes
+  const stash = useStash({ nodes, selectedNodes })
 
   const handleMouseDown = useMouseDrag(
     React.useCallback(
@@ -59,26 +75,18 @@ const NodesView = ({
         switch (event.type) {
           case 'mousedown': {
             stash.preventContextMenu = false
-            const nodeEl =
+            const nodeId =
               event.target instanceof Element
-                ? findParentNodeEl(event.target)
+                ? findParentNodeId(event.target)
                 : null
-            const nodeId = nodeEl ? nodeEl.getAttribute('d-nodeid') : null
-            if (event.ctrlKey) {
-              if (nodeId) {
-                stash.preventContextMenu = true
-                setSelectedNodes(
-                  selectedNodes.has(nodeId)
-                    ? selectedNodes.delete(nodeId)
-                    : selectedNodes.add(nodeId)
-                )
-              }
-            } else if (event.shiftKey) {
-              if (nodeId) setSelectedNodes(selectedNodes.add(nodeId))
-            } else {
-              setSelectedNodes(nodeEl ? [nodeEl.getAttribute('d-nodeid')] : [])
+            const wireId =
+              event.target instanceof Element
+                ? findParentWireId(event.target)
+                : null
+            if (!event.ctrlKey && !event.shiftKey && !nodeId && !wireId) {
+              clearSelection()
             }
-            stash.handleDrag = nodeEl != null
+            stash.handleDrag = nodeId != null
             break
           }
           case 'mousemove': {
@@ -106,17 +114,89 @@ const NodesView = ({
     )
   )
 
+  const handleKeyDown = React.useCallback(
+    (event: SyntheticKeyboardEvent<any>) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        deleteSelected()
+      }
+    },
+    [deleteSelected]
+  )
+
   const handleContextMenu = React.useCallback(e => e.preventDefault(), [])
 
+  const viewBox = React.useMemo(() => `0 0 ${width} ${height}`, [width, height])
+
+  const children = []
+  nodesOrder.forEach((nodeId: string) => {
+    const node = nodes.get(nodeId)
+    if (node) {
+      const selected = selectedNodes.has(node.id)
+      children.push(
+        <NodeContainer
+          key={node.id}
+          id={node.id}
+          selected={selected}
+          selectedTerminals={selectedTerminals.get(node.id)}
+          left={node.left}
+          top={node.top}
+        >
+          {React.createElement(nodeKinds[node.kind], {
+            ...node,
+            selected,
+          })}
+        </NodeContainer>
+      )
+    }
+  })
+
   return (
-    <div
-      className={classes.root}
-      onMouseDown={handleMouseDown}
-      onContextMenu={handleContextMenu}
-      {...props}
-    >
-      {children}
-    </div>
+    <TerminalOffsetsProvider>
+      <div
+        tabIndex={0}
+        className={classes.root}
+        onMouseDown={handleMouseDown}
+        onContextMenu={handleContextMenu}
+        onKeyDown={handleKeyDown}
+        style={{ ...style, width, height }}
+        {...props}
+      >
+        <svg
+          width={width}
+          height={height}
+          viewBox={viewBox}
+          preserveAspectRatio="xMinYMin meet"
+        >
+          {[...wires.values()].map(
+            (wire: WireState): React.Node => {
+              const selected =
+                selectedWires.has(wire.id) ||
+                selectedNodes.has(wire.from.node) ||
+                selectedNodes.has(wire.to.node) ||
+                selectedTerminals.hasIn([
+                  wire.from.node,
+                  'output',
+                  wire.from.terminal,
+                ]) ||
+                selectedTerminals.hasIn([
+                  wire.to.node,
+                  'input',
+                  wire.to.terminal,
+                ])
+              return (
+                <Wire
+                  key={wire.id}
+                  {...wire}
+                  nodes={nodes}
+                  className={selected ? classes.wireSelected : classes.wire}
+                />
+              )
+            }
+          )}
+        </svg>
+        {children}
+      </div>
+    </TerminalOffsetsProvider>
   )
 }
 

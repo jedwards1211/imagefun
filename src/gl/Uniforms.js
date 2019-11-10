@@ -18,7 +18,7 @@ type FloatUniform = {
 
 type Uniform = FloatUniform
 
-export type Uniforms = { [name: string]: Uniform }
+export type Uniforms = { [name: string]: Uniform, ... }
 
 export function glslUniformDeclarations(uniforms: Uniforms): string {
   return map(uniforms, ({ type }, name) => `uniform ${type} ${name};`).join(
@@ -30,7 +30,7 @@ export function putUniforms(
   gl: WebGLRenderingContext,
   program: WebGLProgram,
   uniforms: Uniforms,
-  values: { [$Keys<Uniforms>]: any }
+  values: $Shape<{ [$Keys<Uniforms>]: any }>
 ) {
   const locations = React.useMemo(
     () => getUniformLocations(gl, program, ...Object.keys(uniforms)),

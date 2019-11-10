@@ -5,11 +5,15 @@
 
 import * as React from 'react'
 import DefaultNode from './DefaultNode'
-import { createNodesRedux, type NodesState } from './nodesRedux'
+import {
+  createNodesRedux,
+  type NodesState,
+  NodesStateRecord,
+} from './nodesRedux'
 import NodesActionsContext from './NodesActionsContext'
 import NodesView from './NodesView'
 import { bindActionCreators } from 'redux'
-import { Map as iMap, Set as iSet, OrderedSet } from 'immutable'
+import { Map as iMap, OrderedSet } from 'immutable'
 import uuid from 'uuid'
 
 export type Props = {}
@@ -37,11 +41,16 @@ const initNodes = [
   { id: uuid(), kind: 'effect', props: {}, left: 500, top: 300 },
 ]
 
-const initState: NodesState = {
-  nodes: iMap(initNodes.map(node => [node.id, node])),
-  nodesOrder: OrderedSet(initNodes.map(n => n.id)),
-  selectedNodes: iSet(),
-}
+const initState: NodesState = reducer(
+  NodesStateRecord({
+    nodes: iMap(initNodes.map(node => [node.id, node])),
+    nodesOrder: OrderedSet(initNodes.map(n => n.id)),
+  }),
+  actions.connect({
+    from: { node: initNodes[0].id, terminal: 'image' },
+    to: { node: initNodes[1].id, terminal: 'image' },
+  })
+)
 
 const NodeTestView = (props: Props): React.Node => {
   const [state, dispatch] = React.useReducer(reducer, initState)
@@ -56,7 +65,8 @@ const NodeTestView = (props: Props): React.Node => {
       <NodesView
         state={state}
         nodeKinds={nodeKinds}
-        style={{ width: 1000, height: 1000 }}
+        width={1000}
+        height={1000}
       />
     </NodesActionsContext.Provider>
   )

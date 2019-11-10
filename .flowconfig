@@ -18,3 +18,4 @@ module.system=node
 esproposal.class_static_fields=enable
 esproposal.class_instance_fields=enable
 esproposal.optional_chaining=enable
+exact_by_default=true
