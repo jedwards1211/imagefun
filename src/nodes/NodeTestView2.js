@@ -39,6 +39,8 @@ const { actions, reducer } = createNodesRedux()
 const initNodes = [
   { id: uuid(), kind: 'effect', props: {}, left: 100, top: 100 },
   { id: uuid(), kind: 'effect', props: {}, left: 500, top: 300 },
+  { id: uuid(), kind: 'effect', props: {}, left: 200, top: 400 },
+  { id: uuid(), kind: 'effect', props: {}, left: 300, top: 600 },
 ]
 
 const initState: NodesState = reducer(
