@@ -10,12 +10,11 @@ import useMouseDrag from '../hooks/useMouseDrag'
 import { pick } from 'lodash/fp'
 import { findParentNodeId } from './findParentNodeEl'
 import { TerminalOffsetsProvider } from './TerminalOffsetsContext'
-import { type Wire as WireState } from './nodesRedux'
+import { type Wire as WireState, type NodeAndTerminal } from './nodesRedux'
 import Wire from './Wire'
-
 import NodeContainer from './NodeContainer'
-
 import { findParentWireId } from './findParentWireEl'
+import { findParentTerminalProps } from './findParentTerminalEl'
 
 type Classes<Styles> = $Call<<T>((any) => T) => { [$Keys<T>]: string }, Styles>
 
@@ -62,16 +61,29 @@ const NodesView = ({
   style,
   ...props
 }: Props): React.Node => {
-  const { clearSelection, updateNodes, deleteSelected } = React.useContext(
-    NodesActionsContext
-  )
+  const {
+    clearSelection,
+    updateNodes,
+    deleteSelected,
+    connect,
+  } = React.useContext(NodesActionsContext)
 
-  const stash = useStash({ nodes, selectedNodes })
+  const [dragTo, setDragTo] = React.useState<
+    ?NodeAndTerminal | ?{ top: number, left: number }
+  >(null)
+  const stash = useStash({ nodes, selectedNodes, dragTo })
 
   const handleMouseDown = useMouseDrag(
     React.useCallback(
       (event: MouseEvent | SyntheticMouseEvent<any>) => {
-        const { lastEvent, handleDrag, nodes, selectedNodes } = stash
+        const {
+          lastEvent,
+          handleDrag,
+          nodes,
+          selectedNodes,
+          dragTo,
+          dragFrom,
+        } = stash
         switch (event.type) {
           case 'mousedown': {
             stash.preventContextMenu = false
@@ -87,10 +99,48 @@ const NodesView = ({
               clearSelection()
             }
             stash.handleDrag = nodeId != null
+            const terminalProps =
+              event.target instanceof Element
+                ? findParentTerminalProps(event.target)
+                : null
+            stash.dragFrom = terminalProps
+            if (event.currentTarget instanceof Element) {
+              stash.viewEl = event.currentTarget
+              const viewRect = event.currentTarget.getBoundingClientRect()
+              setDragTo({
+                left: event.clientX - viewRect.left,
+                top: event.clientY - viewRect.top,
+              })
+            }
             break
           }
           case 'mousemove': {
-            if (!handleDrag || !lastEvent || !selectedNodes.size) break
+            if (
+              !handleDrag ||
+              !lastEvent ||
+              !(dragFrom || selectedNodes.size)
+            ) {
+              break
+            }
+            if (dragFrom) {
+              const terminalProps =
+                event.target instanceof Element
+                  ? findParentTerminalProps(event.target)
+                  : null
+              if (
+                terminalProps &&
+                terminalProps.direction !== dragFrom.direction
+              ) {
+                setDragTo(terminalProps)
+              } else if (stash.viewEl instanceof Element) {
+                const viewRect = stash.viewEl.getBoundingClientRect()
+                setDragTo({
+                  left: event.clientX - viewRect.left,
+                  top: event.clientY - viewRect.top,
+                })
+              }
+              break
+            }
             const dx = event.clientX - lastEvent.clientX
             const dy = event.clientY - lastEvent.clientY
             updateNodes(
@@ -106,6 +156,16 @@ const NodesView = ({
                 .filter(Boolean)
             )
             break
+          }
+          case 'mouseup': {
+            stash.dragFrom = null
+            if (dragTo && dragTo.node) {
+              connect({
+                from: dragFrom.direction === 'output' ? dragFrom : dragTo,
+                to: dragTo.direction === 'output' ? dragFrom : dragTo,
+              })
+            }
+            setDragTo(null)
           }
         }
         stash.lastEvent = pick(['clientX', 'clientY'])(event)
@@ -150,6 +210,8 @@ const NodesView = ({
     }
   })
 
+  const { dragFrom } = stash
+
   return (
     <TerminalOffsetsProvider>
       <div
@@ -192,6 +254,15 @@ const NodesView = ({
                 />
               )
             }
+          )}
+          {dragTo && dragFrom && (
+            <Wire
+              key="__dragging__"
+              id="__dragging__"
+              from={dragFrom.direction === 'input' ? dragTo : dragFrom}
+              to={dragFrom.direction === 'output' ? dragTo : dragFrom}
+              nodes={nodes}
+            />
           )}
         </svg>
         {children}

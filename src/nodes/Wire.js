@@ -7,8 +7,8 @@ import NodesActionsContext from './NodesActionsContext'
 
 export type Props = {
   +id: string,
-  +from: NodeAndTerminal,
-  +to: NodeAndTerminal,
+  +from: NodeAndTerminal | { top: number, left: number },
+  +to: NodeAndTerminal | { top: number, left: number },
   +nodes: Nodes,
   +className?: ?string,
 }
@@ -29,18 +29,32 @@ const Wire = ({ id, from, to, nodes, className }: Props): React.Node => {
     [setSelectedWires, addSelectedWires, toggleSelectedWires]
   )
 
-  const fromOffset = useTerminalOffset(from.node, 'output', from.terminal)
-  const toOffset = useTerminalOffset(to.node, 'input', to.terminal)
-  const fromNode = nodes.get(from.node)
-  const toNode = nodes.get(to.node)
+  const fromOffset = useTerminalOffset(
+    from.node || '',
+    'output',
+    from.terminal || ''
+  )
+  const toOffset = useTerminalOffset(to.node || '', 'input', to.terminal || '')
+  const fromNode = from.node ? nodes.get(from.node) : null
+  const toNode = to.node ? nodes.get(to.node) : null
 
-  if (!fromOffset || !toOffset || !fromNode || !toNode)
-    return <React.Fragment />
-
-  const x0 = fromNode.left + fromOffset.left
-  const y0 = fromNode.top + fromOffset.top
-  const x1 = toNode.left + toOffset.left
-  const y1 = toNode.top + toOffset.top
+  let x0, y0, x1, y1
+  if (from.left != null && from.top != null) {
+    x0 = from.left
+    y0 = from.top
+  } else {
+    if (!fromNode || !fromOffset) return <React.Fragment />
+    x0 = fromNode.left + fromOffset.left
+    y0 = fromNode.top + fromOffset.top
+  }
+  if (to.left != null && to.top != null) {
+    x1 = to.left
+    y1 = to.top
+  } else {
+    if (!toNode || !toOffset) return <React.Fragment />
+    x1 = toNode.left + toOffset.left
+    y1 = toNode.top + toOffset.top
+  }
 
   const stretch = Math.max(
     x1 > x0 ? (x1 - x0) / 2 : x0 - x1,
